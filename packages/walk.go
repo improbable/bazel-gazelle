@@ -240,10 +240,15 @@ func buildPackage(c *config.Config, dir, rel string, pkgFiles, otherFiles, genFi
 		cgo = cgo || info.isCgo
 
 		if _, ok := packageMap[info.packageName]; !ok {
+			prefixRoot := ""
+			if c.PrefixRoot != "" {
+				prefixRoot = c.PrefixRoot + "/"
+			}
+
 			packageMap[info.packageName] = &Package{
 				Name:        info.packageName,
 				Dir:         dir,
-				Rel:         rel,
+				Rel:         prefixRoot + rel,
 				HasTestdata: hasTestdata,
 			}
 		}

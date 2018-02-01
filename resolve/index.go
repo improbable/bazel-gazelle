@@ -72,7 +72,7 @@ func (ix *RuleIndex) AddRulesFromFile(c *config.Config, oldFile *bf.File) {
 
 	for _, stmt := range oldFile.Stmt {
 		if call, ok := stmt.(*bf.CallExpr); ok {
-			ix.addRule(call, c.GoPrefix, buildRel, false)
+			ix.addRule(call, c.GoPrefix, c.PrefixRoot, buildRel, false)
 		}
 	}
 }
@@ -82,16 +82,20 @@ func (ix *RuleIndex) AddRulesFromFile(c *config.Config, oldFile *bf.File) {
 func (ix *RuleIndex) AddGeneratedRules(c *config.Config, buildRel string, rules []bf.Expr) {
 	for _, stmt := range rules {
 		if call, ok := stmt.(*bf.CallExpr); ok {
-			ix.addRule(call, c.GoPrefix, buildRel, true)
+			ix.addRule(call, c.GoPrefix, c.PrefixRoot, buildRel, true)
 		}
 	}
 }
 
-func (ix *RuleIndex) addRule(call *bf.CallExpr, goPrefix, buildRel string, generated bool) {
+func (ix *RuleIndex) addRule(call *bf.CallExpr, goPrefix, prefixRoot, buildRel string, generated bool) {
 	rule := bf.Rule{Call: call}
+	labelPath := buildRel
+	if !strings.HasPrefix(labelPath, "proto") {
+		labelPath = prefixRoot + "/" + labelPath
+	}
 	record := &ruleRecord{
 		rule:      rule,
-		label:     Label{Pkg: buildRel, Name: rule.Name()},
+		label:     Label{Pkg: labelPath, Name: rule.Name()},
 		generated: generated,
 	}
 

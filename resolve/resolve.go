@@ -48,7 +48,7 @@ func NewResolver(c *config.Config, l *Labeler, ix *RuleIndex) *Resolver {
 	case config.ExternalMode:
 		e = newExternalResolver(l, c.KnownImports)
 	case config.VendorMode:
-		e = newVendoredResolver(l)
+		e = newVendoredResolver(l, c.PrefixRoot)
 	}
 
 	return &Resolver{
@@ -229,11 +229,18 @@ func (r *Resolver) resolveGo(imp, pkgRel string) (Label, error) {
 
 	if imp == r.c.GoPrefix {
 		return r.l.LibraryLabel(""), nil
-	}
-	if r.c.GoPrefix == "" || strings.HasPrefix(imp, r.c.GoPrefix+"/") {
-		return r.l.LibraryLabel(strings.TrimPrefix(imp, r.c.GoPrefix+"/")), nil
-	}
+	} else if r.c.GoPrefix == "" || strings.HasPrefix(imp, r.c.GoPrefix+"/") {
+		pkg := strings.TrimPrefix(imp, r.c.GoPrefix+"/")
+		if strings.HasPrefix(pkg, "proto") {
+			return r.l.LibraryLabel(pkg), nil
+		}
 
+		prefixRoot := r.c.PrefixRoot
+		if prefixRoot != "" && !strings.HasSuffix(prefixRoot, "/") {
+			prefixRoot += "/"
+		}
+		return r.l.LibraryLabel(prefixRoot + pkg), nil
+	}
 	return r.external.resolve(imp)
 }
 

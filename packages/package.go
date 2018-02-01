@@ -100,12 +100,16 @@ func (p *Package) isBuildable(c *config.Config) bool {
 // TODO(jayconrod): extract canonical import paths from comments on
 // package statements.
 func (p *Package) ImportPath(c *config.Config) string {
-	if p.Rel == c.GoPrefixRel {
-		return c.GoPrefix
-	} else {
-		fromPrefixRel := strings.TrimPrefix(p.Rel, c.GoPrefixRel+"/")
-		return path.Join(c.GoPrefix, fromPrefixRel)
+	rel := strings.TrimPrefix(p.Rel, c.PrefixRoot)
+
+	components := strings.Split(rel, "/")
+	for i := len(components) - 1; i >= 0; i-- {
+		if components[i] == "vendor" {
+			return path.Join(components[i+1:]...)
+		}
 	}
+
+	return path.Join(c.GoPrefix, rel)
 }
 
 // firstGoFile returns the name of a .go file if the package contains at least
