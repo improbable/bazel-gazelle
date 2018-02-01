@@ -18,11 +18,11 @@ package main
 import (
 	"os"
 
+	"github.com/bazelbuild/bazel-gazelle/internal/config"
 	bf "github.com/bazelbuild/buildtools/build"
-	"github.com/bazelbuild/bazel-gazelle/config"
 )
 
-func printFile(c *config.Config, f *bf.File) error {
+func printFile(c *config.Config, f *bf.File, _ string) error {
 	_, err := os.Stdout.Write(bf.Format(f))
 	return err
 }
