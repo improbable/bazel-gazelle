@@ -293,15 +293,7 @@ func removeLegacyProto(c *config.Config, oldFile *bf.File) *bf.File {
 		sort.Ints(deletedIndices)
 	}
 	fixedFile := *oldFile
-	fixedFile.Stmt = make([]bf.Expr, 0, len(oldFile.Stmt)-len(deletedIndices))
-	di := 0
-	for i, stmt := range oldFile.Stmt {
-		if di < len(deletedIndices) && i == deletedIndices[di] {
-			di++
-			continue
-		}
-		fixedFile.Stmt = append(fixedFile.Stmt, stmt)
-	}
+	fixedFile.Stmt = deleteIndices(oldFile.Stmt, deletedIndices)
 	return &fixedFile
 }
 
@@ -316,7 +308,8 @@ func removeLegacyProto(c *config.Config, oldFile *bf.File) *bf.File {
 // statements that may be broken by transformations applied by this function.
 func FixFileMinor(c *config.Config, oldFile *bf.File) *bf.File {
 	fixedFile := migrateLibraryEmbed(c, oldFile)
-	return migrateGrpcCompilers(c, fixedFile)
+	fixedFile = migrateGrpcCompilers(c, fixedFile)
+	return removeBinaryImportPath(c, fixedFile)
 }
 
 // migrateLibraryEmbed converts "library" attributes to "embed" attributes,
@@ -375,6 +368,35 @@ func migrateGrpcCompilers(c *config.Config, oldFile *bf.File) *bf.File {
 		rule.SetAttr("compilers", &bf.ListExpr{
 			List: []bf.Expr{&bf.StringExpr{Value: config.GrpcCompilerLabel}},
 		})
+		fixedFile.Stmt[i] = &fixedCall
+		fixed = true
+	}
+	if !fixed {
+		return oldFile
+	}
+	return &fixedFile
+}
+
+// removeBinaryImportPath removes "importpath" attributes from "go_binary"
+// and "go_test" rules. These are now deprecated.
+func removeBinaryImportPath(c *config.Config, oldFile *bf.File) *bf.File {
+	fixed := false
+	fixedFile := *oldFile
+	for i, stmt := range fixedFile.Stmt {
+		call, ok := stmt.(*bf.CallExpr)
+		if !ok {
+			continue
+		}
+		rule := bf.Rule{Call: call}
+		if rule.Kind() != "go_binary" && rule.Kind() != "go_test" || rule.Attr("importpath") == nil {
+			continue
+		}
+
+		fixedCall := *call
+		fixedCall.List = make([]bf.Expr, len(call.List))
+		copy(fixedCall.List, call.List)
+		rule.Call = &fixedCall
+		rule.DelAttr("importpath")
 		fixedFile.Stmt[i] = &fixedCall
 		fixed = true
 	}

@@ -31,6 +31,8 @@ import (
 
 // A WalkFunc is a callback called by Walk in each visited directory.
 //
+// dir is the absolute file system path to the directory being visited.
+//
 // rel is the relative slash-separated path to the directory from the
 // repository root. Will be "" for the repository root directory itself.
 //
@@ -46,7 +48,7 @@ import (
 // was no file.
 //
 // isUpdateDir is true for directories that Gazelle was asked to update.
-type WalkFunc func(rel string, c *config.Config, pkg *Package, oldFile *bf.File, isUpdateDir bool)
+type WalkFunc func(dir, rel string, c *config.Config, pkg *Package, oldFile *bf.File, isUpdateDir bool)
 
 // Walk traverses a directory tree. In each directory, Walk parses existing
 // build files. In directories that Gazelle was asked to update (c.Dirs), Walk
@@ -80,6 +82,8 @@ func Walk(c *config.Config, root string, f WalkFunc) {
 	if rootRel == "." || rootRel == "/" {
 		rootRel = ""
 	}
+
+	symlinks := symlinkResolver{root: root, visited: []string{root}}
 
 	// visit walks the directory tree in post-order. It returns whether the
 	// given directory or any subdirectory contained a build file or buildable
@@ -174,11 +178,13 @@ func Walk(c *config.Config, root string, f WalkFunc) {
 				(c.ProtoMode != config.DisableProtoMode && strings.HasSuffix(base, ".proto")):
 				pkgFiles = append(pkgFiles, base)
 
+			case f.Mode()&os.ModeSymlink != 0 && symlinks.follow(dir, base):
+				subdirs = append(subdirs, base)
+
 			default:
 				otherFiles = append(otherFiles, base)
 			}
 		}
-
 		// Recurse into subdirectories.
 		hasTestdata := false
 		subdirHasPackage := false
@@ -193,7 +199,7 @@ func Walk(c *config.Config, root string, f WalkFunc) {
 
 		hasPackage := subdirHasPackage || oldFile != nil
 		if haveError || !isUpdateDir || ignore {
-			f(rel, c, nil, oldFile, false)
+			f(dir, rel, c, nil, oldFile, false)
 			return hasPackage
 		}
 
@@ -203,7 +209,7 @@ func Walk(c *config.Config, root string, f WalkFunc) {
 			genFiles = findGenFiles(oldFile, excluded)
 		}
 		pkg := buildPackage(c, dir, rel, pkgFiles, otherFiles, genFiles, hasTestdata)
-		f(rel, c, pkg, oldFile, true)
+		f(dir, rel, c, pkg, oldFile, true)
 		return hasPackage || pkg != nil
 	}
 
@@ -419,4 +425,41 @@ func excludedForSubdir(excluded []string, subdir string) []string {
 		filtered = append(filtered, e[i+1:])
 	}
 	return filtered
+}
+
+type symlinkResolver struct {
+	root    string
+	visited []string
+}
+
+// Decide if symlink dir/base should be followed.
+func (r *symlinkResolver) follow(dir, base string) bool {
+	if dir == r.root && strings.HasPrefix(base, "bazel-") {
+		// Links such as bazel-<workspace>, bazel-out, bazel-genfiles are created by
+		// Bazel to point to internal build directories.
+		return false
+	}
+	// See if the symlink points to a tree that has been already visited.
+	fullpath := filepath.Join(dir, base)
+	dest, err := filepath.EvalSymlinks(fullpath)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(dest) {
+		dest, err = filepath.Abs(filepath.Join(dir, dest))
+		if err != nil {
+			return false
+		}
+	}
+	for _, p := range r.visited {
+		if pathtools.HasPrefix(dest, p) || pathtools.HasPrefix(p, dest) {
+			return false
+		}
+	}
+	r.visited = append(r.visited, dest)
+	stat, err := os.Stat(fullpath)
+	if err != nil {
+		return false
+	}
+	return stat.IsDir()
 }

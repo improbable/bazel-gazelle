@@ -31,7 +31,13 @@ go_library(
 go_binary(
     name = "gazelle",
     embed = [":go_default_library"],
-    importpath = "github.com/bazelbuild/bazel-gazelle/cmd/gazelle",
+    visibility = ["//visibility:public"],
+)
+
+go_binary(
+    name = "gazelle_pure",
+    embed = [":go_default_library"],
+    pure = "on",
     visibility = ["//visibility:public"],
 )
 
@@ -43,7 +49,6 @@ go_test(
         "integration_test.go",
     ],
     embed = [":go_default_library"],
-    importpath = "github.com/bazelbuild/bazel-gazelle/cmd/gazelle",
     deps = [
         "//internal/config:go_default_library",
         "//internal/wspace:go_default_library",

@@ -95,7 +95,7 @@ func runFixUpdate(cmd command, args []string) error {
 	var visits []visitRecord
 
 	// Visit all directories in the repository.
-	packages.Walk(uc.c, uc.c.RepoRoot, func(rel string, c *config.Config, pkg *packages.Package, file *bf.File, isUpdateDir bool) {
+	packages.Walk(uc.c, uc.c.RepoRoot, func(dir, rel string, c *config.Config, pkg *packages.Package, file *bf.File, isUpdateDir bool) {
 		// If this file is ignored or if Gazelle was not asked to update this
 		// directory, just index the build file and move on.
 		if !isUpdateDir {
@@ -116,9 +116,13 @@ func runFixUpdate(cmd command, args []string) error {
 			}
 		}
 
+		// If the file exists, but no Go code is present, create an empty package.
+		// This lets us delete existing rules.
+		if pkg == nil && file != nil {
+			pkg = packages.EmptyPackage(c, dir, rel)
+		}
+
 		// Generate new rules and merge them into the existing file (if present).
-		// TODO(#61): delete rules in directories where pkg == nil (no buildable
-		// Go code).
 		if pkg != nil {
 			g := rules.NewGenerator(c, l, file)
 			rules, empty, err := g.GenerateRules(pkg)
@@ -152,7 +156,8 @@ func runFixUpdate(cmd command, args []string) error {
 	ruleIndex.Finish()
 
 	// Resolve dependencies.
-	resolver := resolve.NewResolver(uc.c, l, ruleIndex, uc.repos)
+	rc := repos.NewRemoteCache(uc.repos)
+	resolver := resolve.NewResolver(uc.c, l, ruleIndex, rc)
 	for i := range visits {
 		for j := range visits[i].rules {
 			visits[i].rules[j] = resolver.ResolveRule(visits[i].rules[j], visits[i].pkgRel)
@@ -199,7 +204,8 @@ func newFixUpdateConfiguration(cmd command, args []string) (*updateConfig, error
 	mode := fs.String("mode", "fix", "print: prints all of the updated BUILD files\n\tfix: rewrites all of the BUILD files in place\n\tdiff: computes the rewrite but then just does a diff")
 	outDir := fs.String("experimental_out_dir", "", "write build files to an alternate directory tree")
 	outSuffix := fs.String("experimental_out_suffix", "", "extra suffix appended to build file names. Only used if -experimental_out_dir is also set.")
-	proto := fs.String("proto", "default", "default: generates new proto rules\n\tdisable: does not touch proto rules\n\tlegacy (deprecated): generates old proto rules")
+	var proto explicitFlag
+	fs.Var(&proto, "proto", "default: generates new proto rules\n\tdisable: does not touch proto rules\n\tlegacy (deprecated): generates old proto rules")
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			fixUpdateUsage(fs)
@@ -228,11 +234,7 @@ func newFixUpdateConfiguration(cmd command, args []string) (*updateConfig, error
 			return nil, fmt.Errorf("-repo_root not specified, and WORKSPACE cannot be found: %v", err)
 		}
 	} else {
-		cwd, err := filepath.Abs(".")
-		if err != nil {
-			return nil, err
-		}
-		uc.c.RepoRoot, err = wspace.Find(cwd)
+		uc.c.RepoRoot, err = wspace.Find(".")
 		if err != nil {
 			return nil, fmt.Errorf("-repo_root not specified, and WORKSPACE cannot be found: %v", err)
 		}
@@ -272,9 +274,12 @@ func newFixUpdateConfiguration(cmd command, args []string) (*updateConfig, error
 		return nil, err
 	}
 
-	uc.c.ProtoMode, err = config.ProtoModeFromString(*proto)
-	if err != nil {
-		return nil, err
+	if proto.set {
+		uc.c.ProtoMode, err = config.ProtoModeFromString(proto.value)
+		if err != nil {
+			return nil, err
+		}
+		uc.c.ProtoModeExplicit = true
 	}
 
 	emit, ok := modeFromName[*mode]
