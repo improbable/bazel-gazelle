@@ -28,6 +28,105 @@ type fixTestCase struct {
 
 func TestFixFile(t *testing.T) {
 	for _, tc := range []fixTestCase{
+		// migrateLibraryEmbed tests
+		{
+			desc: "library migrated to embed",
+			old: `load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["foo.go"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["foo_test.go"],
+    library = ":go_default_library",
+)
+`,
+			want: `load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["foo.go"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["foo_test.go"],
+    embed = [":go_default_library"],
+)
+`,
+		},
+		// migrateGrpcCompilers tests
+		{
+			desc: "go_grpc_library migrated to compilers",
+			old: `load("@io_bazel_rules_go//proto:def.bzl", "go_grpc_library")
+
+proto_library(
+    name = "foo_proto",
+    srcs = ["foo.proto"],
+    visibility = ["//visibility:public"],
+)
+
+go_grpc_library(
+    name = "foo_go_proto",
+    importpath = "example.com/repo",
+    proto = ":foo_proto",
+    visibility = ["//visibility:public"],
+)
+`,
+			want: `load("@io_bazel_rules_go//proto:def.bzl", "go_grpc_library")
+
+proto_library(
+    name = "foo_proto",
+    srcs = ["foo.proto"],
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "foo_go_proto",
+    importpath = "example.com/repo",
+    proto = ":foo_proto",
+    visibility = ["//visibility:public"],
+    compilers = ["@io_bazel_rules_go//proto:go_grpc"],
+)
+`,
+		},
+		// flattenSrcs tests
+		{
+			desc: "flatten srcs",
+			old: `load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "gen.go",
+    ] + select({
+        "@io_bazel_rules_go//platform:darwin_amd64": [
+            # darwin
+            "foo.go", # keep
+        ],
+        "@io_bazel_rules_go//platform:linux_amd64": [
+            # linux
+            "foo.go", # keep
+        ],
+    }),
+)
+`,
+			want: `load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        # darwin
+        # linux
+        "foo.go",  # keep
+        "gen.go",
+    ],
+)
+`,
+		},
 		// squashCgoLibrary tests
 		{
 			desc: "no cgo_library",
@@ -154,20 +253,20 @@ cgo_library(
 go_library(
     name = "go_default_library",
     srcs = [
-        "pure.go",
         "cgo.go",
+        "pure.go",
     ],
     deps = [
-        "pure_deps",
         "cgo_deps",
+        "pure_deps",
     ],
     data = [
-        "pure_data",
         "cgo_data",
+        "pure_data",
     ],
     gc_goopts = [
-        "pure_gc_goopts",
         "cgo_gc_goopts",
+        "pure_gc_goopts",
     ],
     cgo = True,
     cdeps = ["cdeps"],
@@ -175,6 +274,63 @@ go_library(
 )
 # after go_library
 # after cgo_library
+`,
+		},
+		// squashXtest tests
+		{
+			desc: "rename xtest",
+			old: `load("@io_bazel_rules_go//go:def.bzl", "go_test")
+go_test(
+    name = "go_default_xtest",
+    srcs = ["x_test.go"],
+)
+`,
+			want: `load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "go_default_test",
+    srcs = ["x_test.go"],
+)
+`,
+		}, {
+			desc: "squash xtest",
+			old: `load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "go_default_test",
+    srcs = ["i_test.go"],
+    deps = [
+        ":i_dep",
+        ":shared_dep",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "go_default_xtest",
+    srcs = ["x_test.go"],
+    deps = [
+        ":x_dep",
+        ":shared_dep",
+    ],
+    visibility = ["//visibility:public"],
+)
+`,
+			want: `load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "i_test.go",
+        "x_test.go",
+    ],
+    deps = [
+        ":i_dep",
+        ":shared_dep",
+        ":x_dep",
+    ],
+    visibility = ["//visibility:public"],
+)
 `,
 		},
 		// removeLegacyProto tests
@@ -219,108 +375,12 @@ go_proto_library(name = "foo_proto")
 			want: `go_proto_library(name = "foo_proto")
 `,
 		},
-		// migrateLibraryEmbed tests
-		{
-			desc: "library migrated to embed",
-			old: `load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "go_default_library",
-    srcs = ["foo.go"],
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = ["foo_test.go"],
-    library = ":go_default_library",
-)
-`,
-			want: `load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "go_default_library",
-    srcs = ["foo.go"],
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = ["foo_test.go"],
-    embed = [":go_default_library"],
-)
-`,
-		},
-		// migrateGrpcCompilers tests
-		{
-			desc: "go_grpc_library migrated to compilers",
-			old: `load("@io_bazel_rules_go//proto:def.bzl", "go_grpc_library")
-
-proto_library(
-    name = "foo_proto",
-    srcs = ["foo.proto"],
-    visibility = ["//visibility:public"],
-)
-
-go_grpc_library(
-    name = "foo_go_proto",
-    importpath = "example.com/repo",
-    proto = ":foo_proto",
-    visibility = ["//visibility:public"],
-)
-`,
-			want: `load("@io_bazel_rules_go//proto:def.bzl", "go_grpc_library")
-
-proto_library(
-    name = "foo_proto",
-    srcs = ["foo.proto"],
-    visibility = ["//visibility:public"],
-)
-
-go_proto_library(
-    name = "foo_go_proto",
-    importpath = "example.com/repo",
-    proto = ":foo_proto",
-    visibility = ["//visibility:public"],
-    compilers = ["@io_bazel_rules_go//proto:go_grpc"],
-)
-`,
-		},
-		// removeBinaryImportPath tests
-		{
-			desc: "binary importpath removed",
-			old: `load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_test")
-
-go_binary(
-    name = "cmd",
-    srcs = ["main.go"],
-    importpath = "example.com/repo",
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = ["main_test.go"],
-    importpath = "example.com/repo",
-)
-`,
-			want: `load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_test")
-
-go_binary(
-    name = "cmd",
-    srcs = ["main.go"],
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = ["main_test.go"],
-)
-`,
-		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			fix := func(f *bf.File) *bf.File {
-				c := &config.Config{}
-				return FixFile(c, FixFileMinor(c, f))
-			}
-			testFix(t, tc, fix)
+			testFix(t, tc, func(f *bf.File) {
+				c := &config.Config{ShouldFix: true}
+				FixFile(c, f)
+			})
 		})
 	}
 }
@@ -478,6 +538,58 @@ grpc_proto_library(
     name = "bar_go_proto",
 )
 `,
+		}, {
+			desc: "moved symbol",
+			old: `
+load("@io_bazel_rules_go//go:def.bzl", "go_repository")
+
+go_repository(name = "foo")
+`,
+			want: `
+load("@bazel_gazelle//:deps.bzl", "go_repository")
+
+go_repository(name = "foo")
+`,
+		}, {
+			desc: "moved symbols with others",
+			old: `
+load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_repository")
+
+go_rules_dependencies()
+
+go_repository(name = "foo")
+`,
+			want: `
+load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies")
+
+go_rules_dependencies()
+
+load("@bazel_gazelle//:deps.bzl", "go_repository")
+
+go_repository(name = "foo")
+`,
+		}, {
+			desc: "load after",
+			old: `
+load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains")
+
+go_rules_dependencies()
+
+go_register_toolchains()
+
+go_repository(name = "foo")
+`,
+			want: `
+load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains")
+
+go_rules_dependencies()
+
+go_register_toolchains()
+
+load("@bazel_gazelle//:deps.bzl", "go_repository")
+
+go_repository(name = "foo")
+`,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -486,13 +598,18 @@ grpc_proto_library(
 	}
 }
 
-func testFix(t *testing.T, tc fixTestCase, fix func(*bf.File) *bf.File) {
-	oldFile, err := bf.Parse("old", []byte(tc.old))
+func testFix(t *testing.T, tc fixTestCase, fix func(*bf.File)) {
+	f, err := bf.Parse("old", []byte(tc.old))
 	if err != nil {
 		t.Fatalf("%s: parse error: %v", tc.desc, err)
 	}
-	fixedFile := fix(oldFile)
-	if got := string(bf.Format(fixedFile)); got != tc.want {
-		t.Fatalf("%s: got %s; want %s", tc.desc, got, tc.want)
+	fix(f)
+	want := tc.want
+	if len(want) > 0 && want[0] == '\n' {
+		// Strip leading newline, added for readability
+		want = want[1:]
+	}
+	if got := string(bf.Format(f)); got != want {
+		t.Fatalf("%s: got %s; want %s", tc.desc, got, want)
 	}
 }

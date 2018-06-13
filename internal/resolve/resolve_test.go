@@ -372,7 +372,7 @@ func TestResolveGoEmptyPrefix(t *testing.T) {
 
 	imp = "fmt"
 	if _, err := r.resolveGo(imp, label.NoLabel); err == nil {
-		t.Errorf("r.resolveGo(%q) succeeded; want failure")
+		t.Errorf("r.resolveGo(%q) succeeded; want failure", imp)
 	}
 }
 
@@ -405,24 +405,24 @@ func TestResolveProto(t *testing.T) {
 			desc:        "well known",
 			imp:         "google/protobuf/any.proto",
 			wantProto:   label.New("com_google_protobuf", "", "any_proto"),
-			wantGoProto: label.New("com_github_golang_protobuf", "ptypes/any", config.DefaultLibName),
+			wantGoProto: label.NoLabel,
 		}, {
 			desc:        "well known vendor",
 			depMode:     config.VendorMode,
 			imp:         "google/protobuf/any.proto",
 			wantProto:   label.New("com_google_protobuf", "", "any_proto"),
-			wantGoProto: label.New("", "vendor/github.com/golang/protobuf/ptypes/any", config.DefaultLibName),
+			wantGoProto: label.NoLabel,
 		}, {
 			desc:        "descriptor",
 			imp:         "google/protobuf/descriptor.proto",
 			wantProto:   label.New("com_google_protobuf", "", "descriptor_proto"),
-			wantGoProto: label.New("com_github_golang_protobuf", "protoc-gen-go/descriptor", config.DefaultLibName),
+			wantGoProto: label.NoLabel,
 		}, {
 			desc:        "descriptor vendor",
 			depMode:     config.VendorMode,
 			imp:         "google/protobuf/descriptor.proto",
 			wantProto:   label.New("com_google_protobuf", "", "descriptor_proto"),
-			wantGoProto: label.New("", "vendor/github.com/golang/protobuf/protoc-gen-go/descriptor", config.DefaultLibName),
+			wantGoProto: label.NoLabel,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -436,19 +436,97 @@ func TestResolveProto(t *testing.T) {
 
 			got, err := r.resolveProto(tc.imp, tc.from)
 			if err != nil {
-				t.Errorf("resolveProto: got error %v ; want success", err)
+				t.Errorf("resolveProto: got error %v; want success", err)
 			}
 			if !reflect.DeepEqual(got, tc.wantProto) {
-				t.Errorf("resolveProto: got %s ; want %s", got, tc.wantProto)
+				t.Errorf("resolveProto: got %s; want %s", got, tc.wantProto)
 			}
 
 			got, err = r.resolveGoProto(tc.imp, tc.from)
 			if err != nil {
-				t.Errorf("resolveGoProto: go error %v ; want success", err)
+				if tc.wantGoProto != label.NoLabel {
+					t.Errorf("resolveGoProto: got error %v; want %s", got, tc.wantGoProto)
+				} else if _, ok := err.(standardImportError); !ok {
+					t.Errorf("resolveGoProto: got error %v; want standardImportError", err)
+				}
 			}
-			if !reflect.DeepEqual(got, tc.wantGoProto) {
-				t.Errorf("resolveGoProto: got %s ; want %s", got, tc.wantGoProto)
+			if !got.Equal(tc.wantGoProto) {
+				t.Errorf("resolveGoProto: got %s; want %s", got, tc.wantGoProto)
 			}
 		})
+	}
+}
+
+func TestResolveGoWKT(t *testing.T) {
+	c := &config.Config{}
+	l := label.NewLabeler(c)
+	ix := NewRuleIndex()
+	r := NewResolver(c, l, ix, nil)
+
+	for _, tc := range []struct {
+		imp, want string
+	}{
+		{"github.com/golang/protobuf/ptypes/any", "any_go_proto"},
+		{"github.com/golang/protobuf/ptypes/api", "api_go_proto"},
+		{"github.com/golang/protobuf/protoc-gen-go/descriptor", "descriptor_go_proto"},
+		{"github.com/golang/protobuf/ptypes/duration", "duration_go_proto"},
+		{"github.com/golang/protobuf/ptypes/empty", "empty_go_proto"},
+		{"google.golang.org/genproto/protobuf/field_mask", "field_mask_go_proto"},
+		{"google.golang.org/genproto/protobuf/source_context", "source_context_go_proto"},
+		{"github.com/golang/protobuf/ptypes/struct", "struct_go_proto"},
+		{"github.com/golang/protobuf/ptypes/timestamp", "timestamp_go_proto"},
+		{"github.com/golang/protobuf/ptypes/wrappers", "wrappers_go_proto"},
+		{"github.com/golang/protobuf/protoc-gen-go/plugin", "compiler_plugin_go_proto"},
+		{"google.golang.org/genproto/protobuf/ptype", "type_go_proto"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			want := label.Label{
+				Repo: config.RulesGoRepoName,
+				Pkg:  config.WellKnownTypesPkg,
+				Name: tc.want,
+			}
+			if got, err := r.resolveGo(tc.imp, label.NoLabel); err != nil {
+				t.Error(err)
+			} else if !got.Equal(want) {
+				t.Errorf("got %s; want %s", got, want)
+			}
+		})
+	}
+}
+
+func TestResolveGoSkipEmbeds(t *testing.T) {
+	c := &config.Config{}
+	l := label.NewLabeler(c)
+	ix := NewRuleIndex()
+	r := NewResolver(c, l, ix, nil)
+
+	f, err := bf.Parse("(test)", []byte(`
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["lib.go"],
+    importpath = "example.com/repo/lib",
+)
+
+go_test(
+    name = "go_default_test",
+    embed = [":go_default_library"],
+    _gazelle_imports = [
+        "example.com/repo/lib",
+    ],
+)
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix.AddRulesFromFile(c, f)
+	ix.Finish()
+	test := f.Stmt[len(f.Stmt)-1]
+	test = r.ResolveRule(test, "")
+	testRule := bf.Rule{Call: test.(*bf.CallExpr)}
+	testDeps := testRule.Attr("deps")
+	if testDeps != nil {
+		t.Errorf("got deps = %s; want nil", bf.FormatString(testDeps))
 	}
 }

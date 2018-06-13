@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rules_test
+package generator_test
 
 import (
 	"io/ioutil"
@@ -22,10 +22,10 @@ import (
 	"testing"
 
 	"github.com/bazelbuild/bazel-gazelle/internal/config"
+	"github.com/bazelbuild/bazel-gazelle/internal/generator"
 	"github.com/bazelbuild/bazel-gazelle/internal/label"
 	"github.com/bazelbuild/bazel-gazelle/internal/merger"
 	"github.com/bazelbuild/bazel-gazelle/internal/packages"
-	"github.com/bazelbuild/bazel-gazelle/internal/rules"
 	bf "github.com/bazelbuild/buildtools/build"
 )
 
@@ -41,16 +41,17 @@ func testConfig(repoRoot, goPrefix string) *config.Config {
 	return c
 }
 
-func packageFromDir(c *config.Config, dir string) (*packages.Package, *bf.File) {
+func packageFromDir(conf *config.Config, dir string) (*config.Config, *packages.Package, *bf.File) {
 	var pkg *packages.Package
 	var oldFile *bf.File
-	packages.Walk(c, dir, func(_, rel string, _ *config.Config, p *packages.Package, f *bf.File, _ bool) {
+	packages.Walk(conf, dir, func(_, rel string, c *config.Config, p *packages.Package, f *bf.File, _ bool) {
 		if p != nil && p.Dir == dir {
+			conf = c
 			pkg = p
 			oldFile = f
 		}
 	})
-	return pkg, oldFile
+	return conf, pkg, oldFile
 }
 
 func TestGenerator(t *testing.T) {
@@ -74,40 +75,37 @@ func TestGenerator(t *testing.T) {
 	}
 
 	for _, dir := range dirs {
-		rel, err := filepath.Rel(repoRoot, dir)
-		if err != nil {
-			t.Fatal(err)
-		}
+		rel, _ := filepath.Rel(repoRoot, dir)
+		t.Run(rel, func(t *testing.T) {
+			c, pkg, oldFile := packageFromDir(c, dir)
+			g := generator.NewGenerator(c, l, oldFile)
+			rs, _, err := g.GenerateRules(pkg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f := &bf.File{Stmt: rs}
+			generator.SortLabels(f)
+			merger.FixLoads(f)
+			got := string(bf.Format(f))
 
-		pkg, oldFile := packageFromDir(c, dir)
-		g := rules.NewGenerator(c, l, oldFile)
-		rs, _, err := g.GenerateRules(pkg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		f := &bf.File{Stmt: rs}
-		rules.SortLabels(f)
-		f = merger.FixLoads(f)
-		got := string(bf.Format(f))
+			wantPath := filepath.Join(pkg.Dir, "BUILD.want")
+			wantBytes, err := ioutil.ReadFile(wantPath)
+			if err != nil {
+				t.Fatalf("error reading %s: %v", wantPath, err)
+			}
+			want := string(wantBytes)
 
-		wantPath := filepath.Join(pkg.Dir, "BUILD.want")
-		wantBytes, err := ioutil.ReadFile(wantPath)
-		if err != nil {
-			t.Errorf("error reading %s: %v", wantPath, err)
-			continue
-		}
-		want := string(wantBytes)
-
-		if got != want {
-			t.Errorf("g.Generate(%q, %#v) = %s; want %s", rel, pkg, got, want)
-		}
+			if got != want {
+				t.Errorf("g.Generate(%q, %#v) = %s; want %s", rel, pkg, got, want)
+			}
+		})
 	}
 }
 
 func TestGeneratorEmpty(t *testing.T) {
 	c := testConfig("", "example.com/repo")
 	l := label.NewLabeler(c)
-	g := rules.NewGenerator(c, l, nil)
+	g := generator.NewGenerator(c, l, nil)
 
 	pkg := packages.Package{Name: "foo"}
 	want := `filegroup(name = "go_default_library_protos")
@@ -121,8 +119,6 @@ go_library(name = "go_default_library")
 go_binary(name = "repo")
 
 go_test(name = "go_default_test")
-
-go_test(name = "go_default_xtest")
 `
 	_, empty, err := g.GenerateRules(&pkg)
 	if err != nil {
@@ -142,7 +138,7 @@ func TestGeneratorEmptyLegacyProto(t *testing.T) {
 	c := testConfig("", "example.com/repo")
 	c.ProtoMode = config.LegacyProtoMode
 	l := label.NewLabeler(c)
-	g := rules.NewGenerator(c, l, nil)
+	g := generator.NewGenerator(c, l, nil)
 
 	pkg := packages.Package{Name: "foo"}
 	_, empty, err := g.GenerateRules(&pkg)

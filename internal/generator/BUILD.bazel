@@ -10,28 +10,29 @@ go_library(
         "generator.go",
         "sort_labels.go",
     ],
-    importpath = "github.com/bazelbuild/bazel-gazelle/internal/rules",
+    importpath = "github.com/bazelbuild/bazel-gazelle/internal/generator",
     visibility = ["//visibility:public"],
     deps = [
         "//internal/config:go_default_library",
         "//internal/label:go_default_library",
         "//internal/packages:go_default_library",
-        "@com_github_bazelbuild_buildtools//build:go_default_library",
-        "@com_github_bazelbuild_buildtools//tables:go_default_library",
+        "//internal/pathtools:go_default_library",
+        "//vendor/github.com/bazelbuild/buildtools/build:go_default_library",
+        "//vendor/github.com/bazelbuild/buildtools/tables:go_default_library",
     ],
 )
 
 go_test(
-    name = "go_default_xtest",
+    name = "go_default_test",
     size = "small",
     srcs = ["generator_test.go"],
     data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
     deps = [
-        ":go_default_library",
         "//internal/config:go_default_library",
         "//internal/label:go_default_library",
         "//internal/merger:go_default_library",
         "//internal/packages:go_default_library",
-        "@com_github_bazelbuild_buildtools//build:go_default_library",
+        "//vendor/github.com/bazelbuild/buildtools/build:go_default_library",
     ],
 )

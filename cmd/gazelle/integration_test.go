@@ -159,10 +159,10 @@ go_library(
     name = "go_default_library",
     srcs = select({
         "@io_bazel_rules_go//go/platform:linux": [
-						# top comment
-						"foo.go",  # side comment
-						# bar comment
-						"bar.go",
+            # foo comment
+            "foo.go",  # side comment
+            # bar comment
+            "bar.go",
         ],
         "//conditions:default": [],
     }),
@@ -198,15 +198,12 @@ package foo
 
 go_library(
     name = "go_default_library",
-    srcs = select({
-        "@io_bazel_rules_go//go/platform:linux": [
-            # top comment
-            # bar comment
-            "bar.go",
-            "foo.go",  # side comment
-        ],
-        "//conditions:default": [],
-    }),
+    srcs = [
+        # bar comment
+        "bar.go",
+        # foo comment
+        "foo.go",  # side comment
+    ],
     importpath = "example.com/foo",
     visibility = ["//visibility:public"],
     deps = select({
@@ -473,9 +470,9 @@ func TestErrorOutsideWorkspace(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if err := runGazelle(c.dir, c.args); err == nil {
-				t.Fatal("got success; want %q", c.want)
+				t.Fatalf("got success; want %q", c.want)
 			} else if !strings.Contains(err.Error(), c.want) {
-				t.Fatal("got %q; want %q", err, c.want)
+				t.Fatalf("got %q; want %q", err, c.want)
 			}
 		})
 	}
@@ -510,8 +507,10 @@ func TestBuildFileNameIgnoresBuild(t *testing.T) {
 
 func TestExternalVendor(t *testing.T) {
 	files := []fileSpec{
-		{path: "WORKSPACE"},
 		{
+			path:    "WORKSPACE",
+			content: `workspace(name = "banana")`,
+		}, {
 			path: "a.go",
 			content: `package foo
 
@@ -559,6 +558,7 @@ go_library(
 go_library(
     name = "go_default_library",
     srcs = ["bar.go"],
+    importmap = "banana/vendor/golang.org/x/bar",
     importpath = "golang.org/x/bar",
     visibility = ["//visibility:public"],
     deps = ["//vendor/golang.org/x/baz:go_default_library"],
@@ -967,6 +967,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["foo.go"],
+    importmap = "sub/vendor/example.com/foo",
     importpath = "example.com/foo",
     visibility = ["//visibility:public"],
 )
@@ -1117,18 +1118,22 @@ func TestImportReposFromDep(t *testing.T) {
 	files := []fileSpec{
 		{
 			path: "WORKSPACE",
-			content: `workspace(name = "bazel_gazelle")
-
+			content: `
 http_archive(
     name = "io_bazel_rules_go",
-    url = "https://github.com/bazelbuild/rules_go/releases/download/0.7.1/rules_go-0.7.1.tar.gz",
-    sha256 = "341d5eacef704415386974bc82a1783a8b7ffbff2ab6ba02375e1ca20d9b031c",
+    url = "https://github.com/bazelbuild/rules_go/releases/download/0.10.1/rules_go-0.10.1.tar.gz",
+    sha256 = "4b14d8dd31c6dbaf3ff871adcd03f28c3274e42abc855cb8fb4d01233c0154dc",
 )
-load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains")
+http_archive(
+    name = "bazel_gazelle",
+    url = "https://github.com/bazelbuild/bazel-gazelle/releases/download/0.10.0/bazel-gazelle-0.10.0.tar.gz",
+    sha256 = "6228d9618ab9536892aa69082c063207c91e777e51bd3c5544c9c060cafe1bd8",
+)
+load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains", "go_repository")
 go_rules_dependencies()
 go_register_toolchains()
 
-load("//:deps.bzl", "gazelle_dependencies")
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 gazelle_dependencies()
 
 go_repository(
@@ -1202,21 +1207,26 @@ http_archive(
 	checkFiles(t, dir, []fileSpec{
 		{
 			path: "WORKSPACE",
-			content: `workspace(name = "bazel_gazelle")
-
+			content: `
 http_archive(
     name = "io_bazel_rules_go",
-    url = "https://github.com/bazelbuild/rules_go/releases/download/0.7.1/rules_go-0.7.1.tar.gz",
-    sha256 = "341d5eacef704415386974bc82a1783a8b7ffbff2ab6ba02375e1ca20d9b031c",
+    url = "https://github.com/bazelbuild/rules_go/releases/download/0.10.1/rules_go-0.10.1.tar.gz",
+    sha256 = "4b14d8dd31c6dbaf3ff871adcd03f28c3274e42abc855cb8fb4d01233c0154dc",
 )
 
-load("@io_bazel_rules_go//go:def.bzl", "go_register_toolchains", "go_repository", "go_rules_dependencies")
+http_archive(
+    name = "bazel_gazelle",
+    url = "https://github.com/bazelbuild/bazel-gazelle/releases/download/0.10.0/bazel-gazelle-0.10.0.tar.gz",
+    sha256 = "6228d9618ab9536892aa69082c063207c91e777e51bd3c5544c9c060cafe1bd8",
+)
+
+load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains")
 
 go_rules_dependencies()
 
 go_register_toolchains()
 
-load("//:deps.bzl", "gazelle_dependencies")
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
 
 gazelle_dependencies()
 
@@ -1291,6 +1301,34 @@ go_binary(
 			content: "",
 		},
 	})
+}
+
+func TestFixWorkspaceWithoutGazelle(t *testing.T) {
+	files := []fileSpec{
+		{
+			path: "WORKSPACE",
+			content: `
+load("@io_bazel_rules_go//go:def.bzl", "go_repository")
+
+go_repository(
+    name = "com_example_repo",
+    importpath = "example.com/repo",
+    tag = "1.2.3",
+)
+`,
+		},
+	}
+	dir, err := createFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	if err := runGazelle(dir, []string{"fix", "-go_prefix="}); err == nil {
+		t.Error("got success; want error")
+	} else if want := "bazel_gazelle is not declared"; !strings.Contains(err.Error(), want) {
+		t.Errorf("got error %v; want error containing %q", err, want)
+	}
 }
 
 // TODO(jayconrod): more tests

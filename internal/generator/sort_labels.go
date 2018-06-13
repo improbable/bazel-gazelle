@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rules
+package generator
 
 import (
 	"sort"
@@ -42,7 +42,7 @@ func SortLabels(f *bf.File) {
 		if !ok {
 			continue
 		}
-		r := bf.Rule{c}
+		r := bf.Rule{Call: c}
 		if !goRuleKinds[r.Kind()] {
 			continue
 		}
