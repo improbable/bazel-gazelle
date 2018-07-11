@@ -34,7 +34,6 @@ import (
 func (gl *goLang) GenerateRules(c *config.Config, dir, rel string, f *rule.File, subdirs, regularFiles, genFiles []string, otherEmpty, otherGen []*rule.Rule) (empty, gen []*rule.Rule) {
 	// Extract information about proto files. We need this to exclude .pb.go
 	// files and generate go_proto_library rules.
-	gc := getGoConfig(c)
 	pc := proto.GetProtoConfig(c)
 	var protoRuleNames []string
 	protoPackages := make(map[string]proto.Package)
@@ -106,7 +105,7 @@ func (gl *goLang) GenerateRules(c *config.Config, dir, rel string, f *rule.File,
 				for name, ppkg := range protoPackages {
 					pkg = &goPackage{
 						name:       goProtoPackageName(ppkg),
-						importPath: goProtoImportPath(gc, ppkg, rel),
+						importPath: goProtoImportPath(c, ppkg, rel),
 						proto:      protoTargetFromProtoPackage(name, ppkg),
 					}
 					protoName = name
@@ -129,7 +128,7 @@ func (gl *goLang) GenerateRules(c *config.Config, dir, rel string, f *rule.File,
 		}
 		for _, name := range protoRuleNames {
 			ppkg := protoPackages[name]
-			if pkg.importPath == goProtoImportPath(gc, ppkg, rel) {
+			if pkg.importPath == goProtoImportPath(c, ppkg, rel) {
 				protoName = name
 				pkg.proto = protoTargetFromProtoPackage(name, ppkg)
 				break
@@ -149,7 +148,7 @@ func (gl *goLang) GenerateRules(c *config.Config, dir, rel string, f *rule.File,
 			protoEmbed, rs = g.generateProto(pc.Mode, pkg.proto, pkg.importPath)
 		} else {
 			target := protoTargetFromProtoPackage(name, ppkg)
-			importPath := goProtoImportPath(gc, ppkg, rel)
+			importPath := goProtoImportPath(c, ppkg, rel)
 			_, rs = g.generateProto(pc.Mode, target, importPath)
 		}
 		rules = append(rules, rs...)
@@ -268,10 +267,15 @@ func buildPackages(c *config.Config, dir, rel string, goFiles []string, hasTestd
 		}
 
 		if _, ok := packageMap[info.packageName]; !ok {
+			prefixRoot := ""
+			if c.PrefixRoot != "" {
+				prefixRoot = c.PrefixRoot + "/"
+			}
+
 			packageMap[info.packageName] = &goPackage{
 				name:        info.packageName,
 				dir:         dir,
-				rel:         rel,
+				rel:         prefixRoot + rel,
 				hasTestdata: hasTestdata,
 			}
 		}
@@ -380,7 +384,7 @@ func (g *generator) generateProto(mode proto.Mode, target protoTarget, importPat
 	filegroupName := config.DefaultProtosName
 	protoName := target.name
 	if protoName == "" {
-		importPath := inferImportPath(getGoConfig(g.c), g.rel)
+		importPath := inferImportPath(g.c, g.rel)
 		protoName = proto.RuleName(importPath)
 	}
 	goProtoName := strings.TrimSuffix(protoName, "_proto") + "_go_proto"

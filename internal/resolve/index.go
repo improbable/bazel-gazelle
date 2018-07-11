@@ -22,6 +22,7 @@ import (
 	"github.com/bazelbuild/bazel-gazelle/internal/label"
 	"github.com/bazelbuild/bazel-gazelle/internal/repos"
 	"github.com/bazelbuild/bazel-gazelle/internal/rule"
+	"strings"
 )
 
 // ImportSpec describes a library to be imported. Imp is an import string for
@@ -120,9 +121,13 @@ func (ix *RuleIndex) AddRule(c *config.Config, r *rule.Rule, f *rule.File) {
 	}
 
 	rel := f.Rel(c.RepoRoot)
+	labelPath := rel
+	if !strings.HasPrefix(labelPath, "proto") {
+		labelPath = c.PrefixRoot + "/" + labelPath
+	}
 	record := &ruleRecord{
 		rule:       r,
-		label:      label.New(c.RepoName, rel, r.Name()),
+		label:      label.New(c.RepoName, labelPath, r.Name()),
 		importedAs: imps,
 	}
 	if _, ok := ix.labelMap[record.label]; ok {

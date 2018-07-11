@@ -84,6 +84,10 @@ type Config struct {
 	// mode in the future.
 	ShouldFix bool
 
+	// PrefixRoot of the target workspace.
+	// Used if the go portion of a WORKSPACE starts in a subdirectory
+	PrefixRoot string
+
 	// DepMode determines how imports outside of GoPrefix are resolved.
 	DepMode DependencyMode
 
