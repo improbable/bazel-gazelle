@@ -60,6 +60,10 @@ type Config struct {
 	// usage of deprecated rules.
 	ShouldFix bool
 
+	// PrefixRoot of the target workspace.
+	// Used if the go portion of a WORKSPACE starts in a subdirectory
+	PrefixRoot string
+
 	// Exts is a set of configurable extensions. Generally, each language
 	// has its own set of extensions, but other modules may provide their own
 	// extensions as well. Values in here may be populated by command line
