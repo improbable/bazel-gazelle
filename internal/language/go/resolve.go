@@ -142,14 +142,23 @@ func resolveGo(c *config.Config, ix *resolve.RuleIndex, rc *repos.RemoteCache, r
 	}
 
 	if pathtools.HasPrefix(imp, gc.prefix) {
+		// note(paullarsen): is the join necessary here? check
 		pkg := path.Join(gc.prefixRel, pathtools.TrimPrefix(imp, gc.prefix))
-		return label.New("", pkg, config.DefaultLibName), nil
+		if strings.HasPrefix(pkg, "proto") {
+			return label.New("", pkg, config.DefaultLibName), nil
+		}
+		prefixRoot := c.PrefixRoot
+		if prefixRoot != "" && !strings.HasSuffix(prefixRoot, "/") {
+			prefixRoot += "/"
+		}
+
+		return label.New("", prefixRoot + pkg, config.DefaultLibName), nil
 	}
 
 	if gc.depMode == externalMode {
 		return resolveExternal(rc, imp)
 	} else {
-		return resolveVendored(rc, imp)
+		return resolveVendored(rc, imp, c.PrefixRoot)
 	}
 }
 
@@ -225,8 +234,8 @@ func resolveExternal(rc *repos.RemoteCache, imp string) (label.Label, error) {
 	return label.New(repo, pkg, config.DefaultLibName), nil
 }
 
-func resolveVendored(rc *repos.RemoteCache, imp string) (label.Label, error) {
-	return label.New("", path.Join("vendor", imp), config.DefaultLibName), nil
+func resolveVendored(rc *repos.RemoteCache, imp string, prefixRoot string) (label.Label, error) {
+	return label.New("", path.Join(prefixRoot, "vendor", imp), config.DefaultLibName), nil
 }
 
 func resolveProto(c *config.Config, ix *resolve.RuleIndex, rc *repos.RemoteCache, r *rule.Rule, imp string, from label.Label) (label.Label, error) {

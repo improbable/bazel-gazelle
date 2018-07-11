@@ -72,7 +72,7 @@ type platformStringInfo struct {
 type platformStringSet int
 
 const (
-	genericSet platformStringSet = iota
+	genericSet  platformStringSet = iota
 	osSet
 	archSet
 	platformSet
@@ -154,24 +154,22 @@ func (pkg *goPackage) inferImportPath(c *config.Config) error {
 	if !gc.prefixSet {
 		return fmt.Errorf("%s: go prefix is not set, so importpath can't be determined for rules. Set a prefix with a '# gazelle:prefix' comment or with -go_prefix on the command line", pkg.dir)
 	}
-	pkg.importPath = inferImportPath(gc, pkg.rel)
+	pkg.importPath = inferImportPath(c, pkg.rel)
 
-	if pkg.rel == gc.prefixRel {
-		pkg.importPath = gc.prefix
-	} else {
-		fromPrefixRel := strings.TrimPrefix(pkg.rel, gc.prefixRel+"/")
-		pkg.importPath = path.Join(gc.prefix, fromPrefixRel)
-	}
 	return nil
 }
 
-func inferImportPath(gc *goConfig, rel string) string {
-	if rel == gc.prefixRel {
-		return gc.prefix
-	} else {
-		fromPrefixRel := strings.TrimPrefix(rel, gc.prefixRel+"/")
-		return path.Join(gc.prefix, fromPrefixRel)
+func inferImportPath(c *config.Config, prefixedRel string) string {
+	gc := getGoConfig(c)
+	cleanRel := strings.TrimPrefix(prefixedRel, c.PrefixRoot)
+
+	components := strings.Split(cleanRel, "/")
+	for i := len(components) - 1; i >= 0; i-- {
+		if components[i] == "vendor" {
+			return path.Join(components[i+1:]...)
+		}
 	}
+	return path.Join(gc.prefix, cleanRel)
 }
 
 func goProtoPackageName(pkg proto.Package) string {
@@ -189,17 +187,17 @@ func goProtoPackageName(pkg proto.Package) string {
 	return strings.Replace(pkg.Name, ".", "_", -1)
 }
 
-func goProtoImportPath(gc *goConfig, pkg proto.Package, rel string) string {
+func goProtoImportPath(c *config.Config, pkg proto.Package, rel string) string {
 	if value, ok := pkg.Options["go_package"]; ok {
 		if strings.LastIndexByte(value, '/') == -1 {
-			return inferImportPath(gc, rel)
+			return inferImportPath(c, rel)
 		} else if i := strings.LastIndexByte(value, ';'); i != -1 {
 			return value[:i]
 		} else {
 			return value
 		}
 	}
-	return inferImportPath(gc, rel)
+	return inferImportPath(c, rel)
 }
 
 func (t *goTarget) addFile(c *config.Config, info fileInfo) {
