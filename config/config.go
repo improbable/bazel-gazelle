@@ -29,6 +29,7 @@ package config
 import (
 	"flag"
 	"fmt"
+	"go/build"
 	"log"
 	"path/filepath"
 	"strings"
@@ -70,6 +71,10 @@ type Config struct {
 	// ShouldFix determines whether Gazelle attempts to remove and replace
 	// usage of deprecated rules.
 	ShouldFix bool
+
+	// PrefixRoot of the target workspace.
+	// Used if the go portion of a WORKSPACE starts in a subdirectory
+	PrefixRoot string
 
 	// IndexLibraries determines whether Gazelle should build an index of
 	// libraries in the workspace for dependency resolution

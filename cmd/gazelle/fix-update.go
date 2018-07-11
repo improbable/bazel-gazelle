@@ -72,6 +72,7 @@ func (ucr *updateConfigurer) RegisterFlags(fs *flag.FlagSet, cmd string, c *conf
 	c.Exts[updateName] = uc
 
 	c.ShouldFix = cmd == "fix"
+	fs.StringVar(&c.PrefixRoot, "prefix_root", "", "prefix_root of the target workspace")
 
 	fs.StringVar(&ucr.mode, "mode", "fix", "print: prints all of the updated BUILD files\n\tfix: rewrites all of the BUILD files in place\n\tdiff: computes the rewrite but then just does a diff")
 	fs.BoolVar(&ucr.recursive, "r", true, "when true, gazelle will update subdirectories recursively")

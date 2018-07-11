@@ -248,7 +248,7 @@ func (_ *goLang) Configure(c *config.Config, rel string, f *rule.File) {
 	c.Exts[goName] = gc
 
 	if path.Base(rel) == "vendor" {
-		gc.importMapPrefix = inferImportPath(gc, rel)
+		gc.importMapPrefix = inferImportPath(c, rel)
 		gc.importMapPrefixRel = rel
 		gc.prefix = ""
 		gc.prefixRel = rel

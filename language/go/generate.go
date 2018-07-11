@@ -277,10 +277,15 @@ func buildPackages(c *config.Config, dir, rel string, goFiles []string, hasTestd
 		}
 
 		if _, ok := packageMap[info.packageName]; !ok {
+			prefixRoot := ""
+			if c.PrefixRoot != "" {
+				prefixRoot = c.PrefixRoot + "/"
+			}
+
 			packageMap[info.packageName] = &goPackage{
 				name:        info.packageName,
 				dir:         dir,
-				rel:         rel,
+				rel:         prefixRoot + rel,
 				hasTestdata: hasTestdata,
 			}
 		}

@@ -172,15 +172,24 @@ func resolveGo(c *config.Config, ix *resolve.RuleIndex, rc *repo.RemoteCache, r 
 		// packages in current repo were not indexed, relying on prefix to decide what may have been in
 		// current repo
 		if pathtools.HasPrefix(imp, gc.prefix) {
+			// note(paullarsen): is the join necessary here? check
 			pkg := path.Join(gc.prefixRel, pathtools.TrimPrefix(imp, gc.prefix))
-			return label.New("", pkg, defaultLibName), nil
+			if strings.HasPrefix(pkg, "proto") {
+				return label.New("", pkg, config.DefaultLibName), nil
+			}
+			prefixRoot := c.PrefixRoot
+			if prefixRoot != "" && !strings.HasSuffix(prefixRoot, "/") {
+				prefixRoot += "/"
+			}
+
+			return label.New("", prefixRoot + pkg, config.DefaultLibName), nil
 		}
 	}
 
 	if gc.depMode == externalMode {
 		return resolveExternal(rc, imp)
 	} else {
-		return resolveVendored(rc, imp)
+		return resolveVendored(rc, imp, c.PrefixRoot)
 	}
 }
 
@@ -256,8 +265,8 @@ func resolveExternal(rc *repo.RemoteCache, imp string) (label.Label, error) {
 	return label.New(repo, pkg, defaultLibName), nil
 }
 
-func resolveVendored(rc *repo.RemoteCache, imp string) (label.Label, error) {
-	return label.New("", path.Join("vendor", imp), defaultLibName), nil
+func resolveVendored(rc *repo.RemoteCache, imp string, prefixRoot string) (label.Label, error) {
+	return label.New("", path.Join(prefixRoot, "vendor", imp), defaultLibName), nil
 }
 
 func resolveProto(c *config.Config, ix *resolve.RuleIndex, rc *repo.RemoteCache, r *rule.Rule, imp string, from label.Label) (label.Label, error) {
