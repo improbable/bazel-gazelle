@@ -122,7 +122,7 @@ func (ix *RuleIndex) AddRule(c *config.Config, r *rule.Rule, f *rule.File) {
 
 	rel := f.Rel(c.RepoRoot)
 	labelPath := rel
-	if !strings.HasPrefix(labelPath, "proto") {
+	if !strings.HasPrefix(labelPath, "proto") && c.PrefixRoot != "" {
 		labelPath = c.PrefixRoot + "/" + labelPath
 	}
 	record := &ruleRecord{
