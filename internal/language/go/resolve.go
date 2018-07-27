@@ -72,6 +72,11 @@ func (gl *goLang) Resolve(c *config.Config, ix *resolve.RuleIndex, rc *repos.Rem
 	if r.Kind() == "go_proto_library" {
 		resolve = resolveProto
 	}
+	prefRoot := c.PrefixRoot
+	if prefRoot != "" && !strings.HasSuffix(prefRoot, "/") {
+		prefRoot += "/"
+	}
+
 	deps, errs := imports.Map(func(imp string) (string, error) {
 		l, err := resolve(c, ix, rc, r, imp, from)
 		if err == skipImportError {
@@ -80,6 +85,8 @@ func (gl *goLang) Resolve(c *config.Config, ix *resolve.RuleIndex, rc *repos.Rem
 			return "", err
 		}
 		for _, embed := range gl.Embeds(r, from) {
+			// Add improbable prefix root to the path
+			embed.Pkg = prefRoot + embed.Pkg
 			if embed.Equal(l) {
 				return "", nil
 			}
