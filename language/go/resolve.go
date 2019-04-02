@@ -182,14 +182,14 @@ func resolveGo(c *config.Config, ix *resolve.RuleIndex, rc *repo.RemoteCache, r 
 			// note(paullarsen): is the join necessary here? check
 			pkg := path.Join(gc.prefixRel, pathtools.TrimPrefix(imp, gc.prefix))
 			if strings.HasPrefix(pkg, "proto") {
-				return label.New("", pkg, config.DefaultLibName), nil
+				return label.New("", pkg, defaultLibName), nil
 			}
 			prefixRoot := c.PrefixRoot
 			if prefixRoot != "" && !strings.HasSuffix(prefixRoot, "/") {
 				prefixRoot += "/"
 			}
 
-			return label.New("", prefixRoot + pkg, config.DefaultLibName), nil
+			return label.New("", prefixRoot + pkg, defaultLibName), nil
 		}
 	}
 

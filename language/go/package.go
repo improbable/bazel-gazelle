@@ -187,17 +187,17 @@ func goProtoPackageName(pkg proto.Package) string {
 	return strings.Replace(pkg.Name, ".", "_", -1)
 }
 
-func goProtoImportPath(c *config.Config, pkg proto.Package, rel string) string {
+func goProtoImportPath(gc *goConfig, pkg proto.Package, rel string) string {
 	if value, ok := pkg.Options["go_package"]; ok {
 		if strings.LastIndexByte(value, '/') == -1 {
-			return inferImportPath(c, rel)
+			return inferImportPath(gc, rel)
 		} else if i := strings.LastIndexByte(value, ';'); i != -1 {
 			return value[:i]
 		} else {
 			return value
 		}
 	}
-	return inferImportPath(c, rel)
+	return inferImportPath(gc, rel)
 }
 
 func (t *goTarget) addFile(c *config.Config, info fileInfo) {
