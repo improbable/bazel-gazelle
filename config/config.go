@@ -29,7 +29,6 @@ package config
 import (
 	"flag"
 	"fmt"
-	"go/build"
 	"log"
 	"path/filepath"
 	"strings"
